@@ -242,7 +242,6 @@ def generate_person_image(prompt):
     )
     image_gen_pipeline.enable_model_cpu_offload()
     # Create a new image with a random background color
-    prompt = "An indian woman standing still and wearing white shirt and blue jeans"
 
     with torch.no_grad():
         print("Encoding prompts.")
@@ -340,31 +339,31 @@ def app_gradio():
                         )
 
 
-            submit = gr.Button("Submit")
-            gr.Markdown(
-                '<center><span style="color: #FF0000">!!! Click only Once, Wait for Delay !!!</span></center>'
-            )
-            
-            gr.Markdown(
-                '<span style="color: #808080; font-size: small;">Advanced options can adjust details:<br>1. `Inference Step` may enhance details;<br>2. `CFG` is highly correlated with saturation;<br>3. `Random seed` may improve pseudo-shadow.</span>'
-            )
-            with gr.Accordion("Advanced Options", open=False):
-                num_inference_steps = gr.Slider(
-                    label="Inference Step", minimum=10, maximum=100, step=5, value=50
-                )
-                # Guidence Scale
-                guidance_scale = gr.Slider(
-                    label="CFG Strenth", minimum=0.0, maximum=7.5, step=0.5, value=2.5
-                )
-                # Random Seed
-                seed = gr.Slider(
-                    label="Seed", minimum=-1, maximum=10000, step=1, value=42
-                )
-                show_type = gr.Radio(
-                    label="Show Type",
-                    choices=["result only", "input & result", "input & mask & result"],
-                    value="input & mask & result",
-                )
+              submit = gr.Button("Submit")
+              gr.Markdown(
+                  '<center><span style="color: #FF0000">!!! Click only Once, Wait for Delay !!!</span></center>'
+              )
+              
+              gr.Markdown(
+                  '<span style="color: #808080; font-size: small;">Advanced options can adjust details:<br>1. `Inference Step` may enhance details;<br>2. `CFG` is highly correlated with saturation;<br>3. `Random seed` may improve pseudo-shadow.</span>'
+              )
+              with gr.Accordion("Advanced Options", open=False):
+                  num_inference_steps = gr.Slider(
+                      label="Inference Step", minimum=10, maximum=100, step=5, value=50
+                  )
+                  # Guidence Scale
+                  guidance_scale = gr.Slider(
+                      label="CFG Strenth", minimum=0.0, maximum=7.5, step=0.5, value=2.5
+                  )
+                  # Random Seed
+                  seed = gr.Slider(
+                      label="Seed", minimum=-1, maximum=10000, step=1, value=42
+                  )
+                  show_type = gr.Radio(
+                      label="Show Type",
+                      choices=["result only", "input & result", "input & mask & result"],
+                      value="input & mask & result",
+                  )
 
             with gr.Column(scale=2, min_width=500):
                 result_image = gr.Image(interactive=False, label="Result")
