@@ -12,7 +12,9 @@ import base64
 from model.cloth_masker import AutoMasker, vis_mask
 from model.pipeline import CatVTONPipeline
 from utils import init_weight_dtype, resize_and_crop, resize_and_padding
+from dotenv import load_dotenv
 
+load_dotenv()
 
 import gc
 from transformers import T5EncoderModel
