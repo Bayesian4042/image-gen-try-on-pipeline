@@ -415,11 +415,7 @@ def app_gradio():
                             lines=3
                         )
 
-                        cloth_image.change(
-                            generate_upper_cloth_description,
-                            inputs=[cloth_image, cloth_type],
-                            outputs=[cloth_description],
-                        )
+                        
                         
                     with gr.Column(scale=1, min_width=120):
                         gr.Markdown(
@@ -429,6 +425,12 @@ def app_gradio():
                             label="Try-On Cloth Type",
                             choices=["upper", "lower", "overall"],
                             value="upper",
+                        )
+
+                    cloth_image.change(
+                            generate_upper_cloth_description,
+                            inputs=[cloth_image, cloth_type],
+                            outputs=[cloth_description],
                         )
 
 
