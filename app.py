@@ -327,12 +327,29 @@ def pil_image_to_base64(image_path: str, format: str = "PNG") -> str:
     except Exception as e:
         return f"Error converting image to Base64: {e}"
 
-def generate_upper_cloth_description(product_image_path):
+def generate_upper_cloth_description(product_image_path, cloth_type: str):
     base_64_image = pil_image_to_base64(product_image_path)
-    system_prompt = """
-        You are world class fahsion designer
-        Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
-    """
+
+    if (cloth_type == "upper"):
+        system_prompt = """
+            You are world class fahsion designer
+            Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
+        """
+    elif (cloth_type == "lower"):
+        system_prompt = """
+            You are world class fahsion designer
+            Your task is to Write a detailed description of the lower body garment shown in the image, focusing on its fit, fabric type, waist style, and any notable design elements or features in one or two lines for given image.
+        """
+    elif (cloth_type == "overall"):
+        system_prompt = """
+            You are world class fahsion designer
+            Your task is to Write a detailed description of the overall garment shown in the image, focusing on its fit, fabric type, sleeve style, neckline, and any notable design elements or features in one or two lines for given image.
+        """
+    else:
+        system_prompt = """
+            You are world class fahsion designer
+            Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
+        """
 
     response = openai_client.chat.completions.create(
         model="gpt-4o",
@@ -400,7 +417,7 @@ def app_gradio():
 
                         cloth_image.change(
                             generate_upper_cloth_description,
-                            inputs=[cloth_image],
+                            inputs=[cloth_image, cloth_type],
                             outputs=[cloth_description],
                         )
                         
