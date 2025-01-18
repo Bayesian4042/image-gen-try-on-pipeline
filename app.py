@@ -303,22 +303,29 @@ def generate_person_image(text, cloth_description):
     
     return output_path
 
-def pil_image_to_base64(image: Image.Image, format: str = "PNG") -> str:
+def pil_image_to_base64(image_path: str, format: str = "PNG") -> str:
     """
-    Converts a PIL image to a Base64 encoded string.
-    
+    Converts an image at a file path to a Base64 encoded string.
+
     Args:
-        image (PIL.Image.Image): The PIL image to convert.
+        image_path (str): The file path to the image.
         format (str): The format to save the image as (default is PNG).
-    
+
     Returns:
         str: A Base64 encoded string of the image.
     """
-    buffered = BytesIO()
-    image.save(buffered, format=format)
-    buffered.seek(0)  # Go to the start of the BytesIO stream
-    image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-    return image_base64
+    try:
+        # Open the image file
+        image = Image.open(image_path)
+        
+        # Convert the image to Base64
+        buffered = BytesIO()
+        image.save(buffered, format=format)
+        buffered.seek(0)  # Go to the start of the BytesIO stream
+        image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return image_base64
+    except Exception as e:
+        return f"Error converting image to Base64: {e}"
 
 def generate_upper_cloth_description(product_image_path):
     base_64_image = pil_image_to_base64(product_image_path)
