@@ -144,93 +144,96 @@ automasker = AutoMasker(
 )
 
 def submit_function(
-    person_image,
-    cloth_image,
+    person_images,
+    cloth_images,
     cloth_type,
     num_inference_steps,
     guidance_scale,
     seed,
     show_type
 ):
-    person_image, mask = person_image["background"], person_image["layers"][0]
-    mask = Image.open(mask).convert("L")
-    if len(np.unique(np.array(mask))) == 1:
-        mask = None
-    else:
-        mask = np.array(mask)
-        mask[mask > 0] = 255
-        mask = Image.fromarray(mask)
-
-    tmp_folder = args.output_dir
-    date_str = datetime.now().strftime("%Y%m%d%H%M%S")
-    result_save_path = os.path.join(tmp_folder, date_str[:8], date_str[8:] + ".png")
-    if not os.path.exists(os.path.join(tmp_folder, date_str[:8])):
-        os.makedirs(os.path.join(tmp_folder, date_str[:8]))
-
-    generator = None
-    if seed != -1:
-        generator = torch.Generator(device='cuda').manual_seed(seed)
-
-    person_image = Image.open(person_image).convert("RGB")
-    cloth_image = Image.open(cloth_image).convert("RGB")
-    person_image = resize_and_crop(person_image, (args.width, args.height))
-    cloth_image = resize_and_padding(cloth_image, (args.width, args.height))
-    
-    # Process mask
-    if mask is not None:
-        mask = resize_and_crop(mask, (args.width, args.height))
-    else:
-        mask = automasker(
-            person_image,
-            cloth_type
-        )['mask']
-    mask = mask_processor.blur(mask, blur_factor=9)
-
-    # Inference
-    # try:
-    result_image = pipeline(
-        image=person_image,
-        condition_image=cloth_image,
-        mask=mask,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
-        generator=generator
-    )[0]
-    # except Exception as e:
-    #     raise gr.Error(
-    #         "An error occurred. Please try again later: {}".format(e)
-    #     )
-    
-    # Post-process
-    masked_person = vis_mask(person_image, mask)
-    save_result_image = image_grid([person_image, masked_person, cloth_image, result_image], 1, 4)
-    save_result_image.save(result_save_path)
-    if show_type == "result only":
-        return result_image
-    else:
-        width, height = person_image.size
-        if show_type == "input & result":
-            condition_width = width // 2
-            conditions = image_grid([person_image, cloth_image], 2, 1)
+    new_images = []
+    for indx, cloth_image in enumerate(cloth_images):
+        person_image, mask = person_images[indx]["background"], person_images[indx]["layers"][0]
+        mask = Image.open(mask).convert("L")
+        if len(np.unique(np.array(mask))) == 1:
+            mask = None
         else:
-            condition_width = width // 3
-            conditions = image_grid([person_image, masked_person , cloth_image], 3, 1)
-        conditions = conditions.resize((condition_width, height), Image.NEAREST)
-        new_result_image = Image.new("RGB", (width + condition_width + 5, height))
-        new_result_image.paste(conditions, (0, 0))
-        new_result_image.paste(result_image, (condition_width + 5, 0))
-    return new_result_image
+            mask = np.array(mask)
+            mask[mask > 0] = 255
+            mask = Image.fromarray(mask)
+
+        tmp_folder = args.output_dir
+        date_str = datetime.now().strftime("%Y%m%d%H%M%S")
+        result_save_path = os.path.join(tmp_folder, date_str[:8], date_str[8:] + ".png")
+        if not os.path.exists(os.path.join(tmp_folder, date_str[:8])):
+            os.makedirs(os.path.join(tmp_folder, date_str[:8]))
+
+        generator = None
+        if seed != -1:
+            generator = torch.Generator(device='cuda').manual_seed(seed)
+
+        person_image = Image.open(person_image).convert("RGB")
+        cloth_image = Image.open(cloth_image).convert("RGB")
+        person_image = resize_and_crop(person_image, (args.width, args.height))
+        cloth_image = resize_and_padding(cloth_image, (args.width, args.height))
+        
+        # Process mask
+        if mask is not None:
+            mask = resize_and_crop(mask, (args.width, args.height))
+        else:
+            mask = automasker(
+                person_image,
+                cloth_type
+            )['mask']
+        mask = mask_processor.blur(mask, blur_factor=9)
+
+        # Inference
+        # try:
+        result_image = pipeline(
+            image=person_image,
+            condition_image=cloth_image,
+            mask=mask,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            generator=generator
+        )[0]
+        # except Exception as e:
+        #     raise gr.Error(
+        #         "An error occurred. Please try again later: {}".format(e)
+        #     )
+        
+        # Post-process
+        masked_person = vis_mask(person_image, mask)
+        save_result_image = image_grid([person_image, masked_person, cloth_image, result_image], 1, 4)
+        save_result_image.save(result_save_path)
+        if show_type == "result only":
+            return result_image
+        else:
+            width, height = person_image.size
+            if show_type == "input & result":
+                condition_width = width // 2
+                conditions = image_grid([person_image, cloth_image], 2, 1)
+            else:
+                condition_width = width // 3
+                conditions = image_grid([person_image, masked_person , cloth_image], 3, 1)
+            conditions = conditions.resize((condition_width, height), Image.NEAREST)
+            new_result_image = Image.new("RGB", (width + condition_width + 5, height))
+            new_result_image.paste(conditions, (0, 0))
+            new_result_image.paste(result_image, (condition_width + 5, 0))
+        new_images.append(new_result_image)
+    return new_images
 
 
 def person_example_fn(image_path):
     return image_path
 
-def generate_person_image(prompt):
+def generate_person_images(prompts):
     """
     Creates a test image based on the prompt.
     Returns the path to the generated image.
     """
-
+    output_paths = []
     ckpt_id = "black-forest-labs/FLUX.1-dev"
 
     image_gen_pipeline = FluxPipeline.from_pretrained(
@@ -241,58 +244,62 @@ def generate_person_image(prompt):
         torch_dtype=torch.float16,
     )
     image_gen_pipeline.enable_model_cpu_offload()
-    # Create a new image with a random background color
+    
+    for prompt in prompts:
+        print(f"Prompt: {prompt}")
 
-    with torch.no_grad():
-        print("Encoding prompts.")
-        prompt_embeds, pooled_prompt_embeds, text_ids = image_gen_pipeline.encode_prompt(
-            prompt=prompt, prompt_2=None, max_sequence_length=256
+        with torch.no_grad():
+            print("Encoding prompts.")
+            prompt_embeds, pooled_prompt_embeds, text_ids = image_gen_pipeline.encode_prompt(
+                prompt=prompt, prompt_2=None, max_sequence_length=256
+            )
+
+        image_gen_pipeline = image_gen_pipeline.to("cpu")
+        del image_gen_pipeline
+
+        flush()
+
+        print(f"prompt_embeds shape: {prompt_embeds.shape}")
+        print(f"pooled_prompt_embeds shape: {pooled_prompt_embeds.shape}")
+        # Add the prompt text to the image
+        transformer_4bit = FluxTransformer2DModel.from_pretrained(ckpt_4bit_id, subfolder="transformer")
+        image_gen_pipeline = FluxPipeline.from_pretrained(
+            ckpt_id,
+            text_encoder=None,
+            text_encoder_2=None,
+            tokenizer=None,
+            tokenizer_2=None,
+            transformer=transformer_4bit,
+            torch_dtype=torch.float16,
         )
+        image_gen_pipeline.enable_model_cpu_offload()
 
-    image_gen_pipeline = image_gen_pipeline.to("cpu")
-    del image_gen_pipeline
+        print("Running denoising.")
+        height, width = 1024, 1024
 
-    flush()
-
-    print(f"prompt_embeds shape: {prompt_embeds.shape}")
-    print(f"pooled_prompt_embeds shape: {pooled_prompt_embeds.shape}")
-    # Add the prompt text to the image
-    transformer_4bit = FluxTransformer2DModel.from_pretrained(ckpt_4bit_id, subfolder="transformer")
-    image_gen_pipeline = FluxPipeline.from_pretrained(
-        ckpt_id,
-        text_encoder=None,
-        text_encoder_2=None,
-        tokenizer=None,
-        tokenizer_2=None,
-        transformer=transformer_4bit,
-        torch_dtype=torch.float16,
-    )
-    image_gen_pipeline.enable_model_cpu_offload()
-
-    print("Running denoising.")
-    height, width = 1024, 1024
-
-    images = image_gen_pipeline(
-        prompt_embeds=prompt_embeds,
-        pooled_prompt_embeds=pooled_prompt_embeds,
-        num_inference_steps=50,
-        guidance_scale=5.5,
-        height=height,
-        width=width,
-        output_type="pil",
-    ).images
+        images = image_gen_pipeline(
+            prompt_embeds=prompt_embeds,
+            pooled_prompt_embeds=pooled_prompt_embeds,
+            num_inference_steps=50,
+            guidance_scale=5.5,
+            height=height,
+            width=width,
+            output_type="pil",
+        ).images
+        
+        # Add current time to make each image unique
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create output directory if it doesn't exist
+        os.makedirs('generated_images', exist_ok=True)
+        
+        # Save the image
+        output_path = f'generated_images/generated_{timestamp}.png'
+        images[0].save(output_path)
+        
+        output_paths.append(output_path)
     
-    # Add current time to make each image unique
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Create output directory if it doesn't exist
-    os.makedirs('generated_images', exist_ok=True)
-    
-    # Save the image
-    output_path = f'generated_images/generated_{timestamp}.png'
-    images[0].save(output_path)
-    
-    return output_path
+    return output_paths
 
 HEADER = """
 """
@@ -302,7 +309,12 @@ def app_gradio():
         gr.Markdown(HEADER)
         with gr.Row():
             with gr.Column(scale=1, min_width=350):
-              text_prompt = gr.Textbox(
+              text_prompt_front = gr.Textbox(
+                label="Describe the person (e.g., 'a young woman in a neutral pose')",
+                lines=3
+              )
+
+              text_prompt_back = gr.Textbox(
                 label="Describe the person (e.g., 'a young woman in a neutral pose')",
                 lines=3
               )
@@ -310,14 +322,25 @@ def app_gradio():
               generate_button = gr.Button("Generate Person Image")
                 
                 # Hidden image path component
-              image_path = gr.Image(
+              image_path_1 = gr.Image(
+                    type="filepath",
+                    interactive=True,
+                    visible=False,
+                )
+              
+              image_path_2 = gr.Image(
                     type="filepath",
                     interactive=True,
                     visible=False,
                 )
                 
                 # Display generated person image
-              person_image = gr.ImageEditor(
+              person_image_1 = gr.ImageEditor(
+                    interactive=True,
+                    label="Generated Person Image",
+                    type="filepath"
+                )
+              person_image_2 = gr.ImageEditor(
                     interactive=True,
                     label="Generated Person Image",
                     type="filepath"
@@ -325,9 +348,13 @@ def app_gradio():
 
               with gr.Row():
                     with gr.Column(scale=1, min_width=230):
-                        cloth_image = gr.Image(
+                        cloth_image_front = gr.Image(
                             interactive=True, label="Condition Image", type="filepath"
                         )
+                        cloth_image_back = gr.Image(
+                            interactive=True, label="Condition Image", type="filepath"
+                        )
+                        cloth_images = [cloth_image_front, cloth_image_back]
                     with gr.Column(scale=1, min_width=120):
                         gr.Markdown(
                             '<span style="color: #808080; font-size: small;">Two ways to provide Mask:<br>1. Upload the person image and use the `🖌️` above to draw the Mask (higher priority)<br>2. Select the `Try-On Cloth Type` to generate automatically </span>'
@@ -366,36 +393,44 @@ def app_gradio():
                   )
 
             with gr.Column(scale=2, min_width=500):
-                result_image = gr.Image(interactive=False, label="Result")
+                # single or multiple image
+
+                result_image_1 = gr.Image(interactive=False, label="Result")
+                result_image_2 = gr.Image(interactive=False, label="Result")
                 with gr.Row():
                     # Photo Examples
                     root_path = "resource/demo/example"
                     
 
-            image_path.change(
-                person_example_fn, inputs=image_path, outputs=person_image
+            image_path_1.change(
+                person_example_fn, inputs=image_path_1, outputs=person_image_1
             )
+
+            image_path_2.change(
+                person_example_fn, inputs=image_path_2, outputs=person_image_1
+            )
+
 
             # Connect the generation button
             generate_button.click(
-                generate_person_image,
-                inputs=[text_prompt],
-                outputs=[person_image]
+                generate_person_images,
+                inputs=[text_prompt_front, text_prompt_back],
+                outputs=[person_image_1, person_image_2]
             )
 
-            submit.click(
-                submit_function,
-                [
-                    person_image,
-                    cloth_image,
-                    cloth_type,
-                    num_inference_steps,
-                    guidance_scale,
-                    seed,
-                    show_type,
-                ],
-                result_image,
-            )
+            # submit.click(
+            #     submit_function,
+            #     [
+            #         [person_image_1, person_image_2],
+            #         cloth_images,
+            #         cloth_type,
+            #         num_inference_steps,
+            #         guidance_scale,
+            #         seed,
+            #         show_type,
+            #     ],
+            #     [result_image_1, result_image_2],
+            # )
     demo.queue().launch(share=True, show_error=True)
 
 
