@@ -242,6 +242,7 @@ def generate_person_image(text, cloth_description):
     prompt = generate_ai_model_prompt(text, cloth_description)
     ckpt_id = "black-forest-labs/FLUX.1-dev"
 
+    print("generating image with prompt: ", prompt)
     image_gen_pipeline = FluxPipeline.from_pretrained(
         ckpt_id,
         text_encoder_2=text_encoder_2_4bit,
