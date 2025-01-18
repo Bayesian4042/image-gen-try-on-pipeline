@@ -342,7 +342,8 @@ def generate_upper_cloth_description(product_image_path):
                 {
                    "type": "image_url",
                    "image_url": {
-                        "url": base_64_image
+                        "url": f"data:image/jpeg;base64,{base_64_image}"
+
                    }
                 }
             ]},
