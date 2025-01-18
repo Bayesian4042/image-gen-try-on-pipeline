@@ -234,12 +234,12 @@ def submit_function(
 def person_example_fn(image_path):
     return image_path
 
-def generate_person_image(prompt):
+def generate_person_image(text, cloth_description):
     """
     Creates a test image based on the prompt.
     Returns the path to the generated image.
     """
-
+    prompt = generate_ai_model_prompt(text, cloth_description)
     ckpt_id = "black-forest-labs/FLUX.1-dev"
 
     image_gen_pipeline = FluxPipeline.from_pretrained(
@@ -451,7 +451,7 @@ def app_gradio():
             # Connect the generation button
             generate_button.click(
                 generate_person_image,
-                inputs=[generate_ai_model_prompt(text_prompt, cloth_description)],
+                inputs=[text_prompt, cloth_description],
                 outputs=[person_image]
             )
 
