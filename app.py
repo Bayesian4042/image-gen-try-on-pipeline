@@ -343,6 +343,8 @@ def generate_upper_cloth_description(product_image_path):
         ],
     )
 
+    return response.choices[0].message.content
+
 def generate_ai_model_prompt(model_description, product_description):
     return f" {model_description} wearing {product_description}."
 
