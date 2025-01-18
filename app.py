@@ -382,7 +382,17 @@ def app_gradio():
                             interactive=True, label="Condition Image", type="filepath"
                         )
 
-                        cloth_description = generate_upper_cloth_description(cloth_image)
+                        cloth_description = gr.Textbox(
+                            label="Cloth Description", 
+                            interactive=False, 
+                            lines=3
+                        )
+
+                        cloth_image.change(
+                            generate_upper_cloth_description,
+                            inputs=[cloth_image],
+                            outputs=[cloth_description],
+                        )
                         
                     with gr.Column(scale=1, min_width=120):
                         gr.Markdown(
