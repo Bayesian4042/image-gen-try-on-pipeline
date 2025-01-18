@@ -13,6 +13,8 @@ from model.cloth_masker import AutoMasker, vis_mask
 from model.pipeline import CatVTONPipeline
 from utils import init_weight_dtype, resize_and_crop, resize_and_padding
 from dotenv import load_dotenv
+from io import BytesIO
+
 
 load_dotenv()
 
@@ -301,14 +303,25 @@ def generate_person_image(prompt):
     
     return output_path
 
-def image_to_base64(image_path):
-    with open(image_path, "rb") as image_file:
-        # Read the image file as binary data
-        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
-    return encoded_string
+def pil_image_to_base64(image: Image.Image, format: str = "PNG") -> str:
+    """
+    Converts a PIL image to a Base64 encoded string.
+    
+    Args:
+        image (PIL.Image.Image): The PIL image to convert.
+        format (str): The format to save the image as (default is PNG).
+    
+    Returns:
+        str: A Base64 encoded string of the image.
+    """
+    buffered = BytesIO()
+    image.save(buffered, format=format)
+    buffered.seek(0)  # Go to the start of the BytesIO stream
+    image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return image_base64
 
 def generate_upper_cloth_description(product_image_path):
-    base_64_image = image_to_base64(product_image_path)
+    base_64_image = pil_image_to_base64(product_image_path)
     system_prompt = """
         You are world class fahsion designer
         Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
