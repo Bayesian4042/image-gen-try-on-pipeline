@@ -1,14 +1,14 @@
 import argparse
 import os
 from datetime import datetime
-
+from openai import AzureOpenAI
 import gradio as gr
 import numpy as np
 import torch
 from diffusers.image_processor import VaeImageProcessor
 from huggingface_hub import snapshot_download
 from PIL import Image
-
+import base64
 from model.cloth_masker import AutoMasker, vis_mask
 from model.pipeline import CatVTONPipeline
 from utils import init_weight_dtype, resize_and_crop, resize_and_padding
@@ -17,6 +17,13 @@ from utils import init_weight_dtype, resize_and_crop, resize_and_padding
 import gc
 from transformers import T5EncoderModel
 from diffusers import FluxPipeline, FluxTransformer2DModel
+
+openai_client = AzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            azure_endpoint=os.getenv("AZURE_ENDPOINT"),
+            api_version="2024-02-15-preview",
+            azure_deployment="gpt-4o-mvp-dev"
+)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
@@ -124,116 +131,111 @@ text_encoder_2_4bit = T5EncoderModel.from_pretrained(
 )
 
 # image gen pipeline
-
-
 # Pipeline
-# pipeline = CatVTONPipeline(
-#     base_ckpt=args.base_model_path,
-#     attn_ckpt=repo_path,
-#     attn_ckpt_version="mix",
-#     weight_dtype=init_weight_dtype(args.mixed_precision),
-#     use_tf32=args.allow_tf32,
-#     device='cuda'
-# )
-# # AutoMasker
-# mask_processor = VaeImageProcessor(vae_scale_factor=8, do_normalize=False, do_binarize=True, do_convert_grayscale=True)
-# automasker = AutoMasker(
-#     densepose_ckpt=os.path.join(repo_path, "DensePose"),
-#     schp_ckpt=os.path.join(repo_path, "SCHP"),
-#     device='cuda', 
-# )
+pipeline = CatVTONPipeline(
+    base_ckpt=args.base_model_path,
+    attn_ckpt=repo_path,
+    attn_ckpt_version="mix",
+    weight_dtype=init_weight_dtype(args.mixed_precision),
+    use_tf32=args.allow_tf32,
+    device='cuda'
+)
+# AutoMasker
+mask_processor = VaeImageProcessor(vae_scale_factor=8, do_normalize=False, do_binarize=True, do_convert_grayscale=True)
+automasker = AutoMasker(
+    densepose_ckpt=os.path.join(repo_path, "DensePose"),
+    schp_ckpt=os.path.join(repo_path, "SCHP"),
+    device='cuda', 
+)
 
 def submit_function(
-    person_images,
-    cloth_images,
+    person_image,
+    cloth_image,
     cloth_type,
     num_inference_steps,
     guidance_scale,
     seed,
     show_type
 ):
-    new_images = []
-    for indx, cloth_image in enumerate(cloth_images):
-        person_image, mask = person_images[indx]["background"], person_images[indx]["layers"][0]
-        mask = Image.open(mask).convert("L")
-        if len(np.unique(np.array(mask))) == 1:
-            mask = None
+    person_image, mask = person_image["background"], person_image["layers"][0]
+    mask = Image.open(mask).convert("L")
+    if len(np.unique(np.array(mask))) == 1:
+        mask = None
+    else:
+        mask = np.array(mask)
+        mask[mask > 0] = 255
+        mask = Image.fromarray(mask)
+
+    tmp_folder = args.output_dir
+    date_str = datetime.now().strftime("%Y%m%d%H%M%S")
+    result_save_path = os.path.join(tmp_folder, date_str[:8], date_str[8:] + ".png")
+    if not os.path.exists(os.path.join(tmp_folder, date_str[:8])):
+        os.makedirs(os.path.join(tmp_folder, date_str[:8]))
+
+    generator = None
+    if seed != -1:
+        generator = torch.Generator(device='cuda').manual_seed(seed)
+
+    person_image = Image.open(person_image).convert("RGB")
+    cloth_image = Image.open(cloth_image).convert("RGB")
+    person_image = resize_and_crop(person_image, (args.width, args.height))
+    cloth_image = resize_and_padding(cloth_image, (args.width, args.height))
+    
+    # Process mask
+    if mask is not None:
+        mask = resize_and_crop(mask, (args.width, args.height))
+    else:
+        mask = automasker(
+            person_image,
+            cloth_type
+        )['mask']
+    mask = mask_processor.blur(mask, blur_factor=9)
+
+    # Inference
+    # try:
+    result_image = pipeline(
+        image=person_image,
+        condition_image=cloth_image,
+        mask=mask,
+        num_inference_steps=num_inference_steps,
+        guidance_scale=guidance_scale,
+        generator=generator
+    )[0]
+    # except Exception as e:
+    #     raise gr.Error(
+    #         "An error occurred. Please try again later: {}".format(e)
+    #     )
+    
+    # Post-process
+    masked_person = vis_mask(person_image, mask)
+    save_result_image = image_grid([person_image, masked_person, cloth_image, result_image], 1, 4)
+    save_result_image.save(result_save_path)
+    if show_type == "result only":
+        return result_image
+    else:
+        width, height = person_image.size
+        if show_type == "input & result":
+            condition_width = width // 2
+            conditions = image_grid([person_image, cloth_image], 2, 1)
         else:
-            mask = np.array(mask)
-            mask[mask > 0] = 255
-            mask = Image.fromarray(mask)
-
-        tmp_folder = args.output_dir
-        date_str = datetime.now().strftime("%Y%m%d%H%M%S")
-        result_save_path = os.path.join(tmp_folder, date_str[:8], date_str[8:] + ".png")
-        if not os.path.exists(os.path.join(tmp_folder, date_str[:8])):
-            os.makedirs(os.path.join(tmp_folder, date_str[:8]))
-
-        generator = None
-        if seed != -1:
-            generator = torch.Generator(device='cuda').manual_seed(seed)
-
-        person_image = Image.open(person_image).convert("RGB")
-        cloth_image = Image.open(cloth_image).convert("RGB")
-        person_image = resize_and_crop(person_image, (args.width, args.height))
-        cloth_image = resize_and_padding(cloth_image, (args.width, args.height))
-        
-        # Process mask
-        if mask is not None:
-            mask = resize_and_crop(mask, (args.width, args.height))
-        else:
-            mask = automasker(
-                person_image,
-                cloth_type
-            )['mask']
-        mask = mask_processor.blur(mask, blur_factor=9)
-
-        # Inference
-        # try:
-        result_image = pipeline(
-            image=person_image,
-            condition_image=cloth_image,
-            mask=mask,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            generator=generator
-        )[0]
-        # except Exception as e:
-        #     raise gr.Error(
-        #         "An error occurred. Please try again later: {}".format(e)
-        #     )
-        
-        # Post-process
-        masked_person = vis_mask(person_image, mask)
-        save_result_image = image_grid([person_image, masked_person, cloth_image, result_image], 1, 4)
-        save_result_image.save(result_save_path)
-        if show_type == "result only":
-            return result_image
-        else:
-            width, height = person_image.size
-            if show_type == "input & result":
-                condition_width = width // 2
-                conditions = image_grid([person_image, cloth_image], 2, 1)
-            else:
-                condition_width = width // 3
-                conditions = image_grid([person_image, masked_person , cloth_image], 3, 1)
-            conditions = conditions.resize((condition_width, height), Image.NEAREST)
-            new_result_image = Image.new("RGB", (width + condition_width + 5, height))
-            new_result_image.paste(conditions, (0, 0))
-            new_result_image.paste(result_image, (condition_width + 5, 0))
-        new_images.append(new_result_image)
-    return new_images
+            condition_width = width // 3
+            conditions = image_grid([person_image, masked_person , cloth_image], 3, 1)
+        conditions = conditions.resize((condition_width, height), Image.NEAREST)
+        new_result_image = Image.new("RGB", (width + condition_width + 5, height))
+        new_result_image.paste(conditions, (0, 0))
+        new_result_image.paste(result_image, (condition_width + 5, 0))
+    return new_result_image
 
 
 def person_example_fn(image_path):
     return image_path
 
-def generate_person_images(prompts):
+def generate_person_image(prompt):
     """
     Creates a test image based on the prompt.
     Returns the path to the generated image.
     """
-    output_paths = []
+
     ckpt_id = "black-forest-labs/FLUX.1-dev"
 
     image_gen_pipeline = FluxPipeline.from_pretrained(
@@ -244,62 +246,90 @@ def generate_person_images(prompts):
         torch_dtype=torch.float16,
     )
     image_gen_pipeline.enable_model_cpu_offload()
-    
-    for prompt in prompts:
-        print(f"Prompt: {prompt}")
+    # Create a new image with a random background color
 
-        with torch.no_grad():
-            print("Encoding prompts.")
-            prompt_embeds, pooled_prompt_embeds, text_ids = image_gen_pipeline.encode_prompt(
-                prompt=prompt, prompt_2=None, max_sequence_length=256
-            )
-
-        image_gen_pipeline = image_gen_pipeline.to("cpu")
-        del image_gen_pipeline
-
-        flush()
-
-        print(f"prompt_embeds shape: {prompt_embeds.shape}")
-        print(f"pooled_prompt_embeds shape: {pooled_prompt_embeds.shape}")
-        # Add the prompt text to the image
-        transformer_4bit = FluxTransformer2DModel.from_pretrained(ckpt_4bit_id, subfolder="transformer")
-        image_gen_pipeline = FluxPipeline.from_pretrained(
-            ckpt_id,
-            text_encoder=None,
-            text_encoder_2=None,
-            tokenizer=None,
-            tokenizer_2=None,
-            transformer=transformer_4bit,
-            torch_dtype=torch.float16,
+    with torch.no_grad():
+        print("Encoding prompts.")
+        prompt_embeds, pooled_prompt_embeds, text_ids = image_gen_pipeline.encode_prompt(
+            prompt=prompt, prompt_2=None, max_sequence_length=256
         )
-        image_gen_pipeline.enable_model_cpu_offload()
 
-        print("Running denoising.")
-        height, width = 1024, 1024
+    image_gen_pipeline = image_gen_pipeline.to("cpu")
+    del image_gen_pipeline
 
-        images = image_gen_pipeline(
-            prompt_embeds=prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            num_inference_steps=50,
-            guidance_scale=5.5,
-            height=height,
-            width=width,
-            output_type="pil",
-        ).images
-        
-        # Add current time to make each image unique
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Create output directory if it doesn't exist
-        os.makedirs('generated_images', exist_ok=True)
-        
-        # Save the image
-        output_path = f'generated_images/generated_{timestamp}.png'
-        images[0].save(output_path)
-        
-        output_paths.append(output_path)
+    flush()
+
+    print(f"prompt_embeds shape: {prompt_embeds.shape}")
+    print(f"pooled_prompt_embeds shape: {pooled_prompt_embeds.shape}")
+    # Add the prompt text to the image
+    transformer_4bit = FluxTransformer2DModel.from_pretrained(ckpt_4bit_id, subfolder="transformer")
+    image_gen_pipeline = FluxPipeline.from_pretrained(
+        ckpt_id,
+        text_encoder=None,
+        text_encoder_2=None,
+        tokenizer=None,
+        tokenizer_2=None,
+        transformer=transformer_4bit,
+        torch_dtype=torch.float16,
+    )
+    image_gen_pipeline.enable_model_cpu_offload()
+
+    print("Running denoising.")
+    height, width = 1024, 1024
+
+    images = image_gen_pipeline(
+        prompt_embeds=prompt_embeds,
+        pooled_prompt_embeds=pooled_prompt_embeds,
+        num_inference_steps=50,
+        guidance_scale=5.5,
+        height=height,
+        width=width,
+        output_type="pil",
+    ).images
     
-    return output_paths[0], output_paths[1]
+    # Add current time to make each image unique
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create output directory if it doesn't exist
+    os.makedirs('generated_images', exist_ok=True)
+    
+    # Save the image
+    output_path = f'generated_images/generated_{timestamp}.png'
+    images[0].save(output_path)
+    
+    return output_path
+
+def image_to_base64(image_path):
+    with open(image_path, "rb") as image_file:
+        # Read the image file as binary data
+        encoded_string = base64.b64encode(image_file.read()).decode("utf-8")
+    return encoded_string
+
+def generate_upper_cloth_description(product_image_path):
+    base_64_image = image_to_base64(product_image_path)
+    system_prompt = """
+        You are world class fahsion designer
+        Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
+    """
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [
+                {
+                   "type": "image_url",
+                   "image_url": {
+                        "url": base_64_image
+                   }
+                }
+            ]},
+            
+        ],
+    )
+
+def generate_ai_model_prompt(model_description, product_description):
+    return f" {model_description} wearing {product_description}."
 
 HEADER = """
 """
@@ -309,52 +339,36 @@ def app_gradio():
         gr.Markdown(HEADER)
         with gr.Row():
             with gr.Column(scale=1, min_width=350):
-              text_prompt_front = gr.Textbox(
+              text_prompt = gr.Textbox(
                 label="Describe the person (e.g., 'a young woman in a neutral pose')",
                 lines=3
               )
 
-              text_prompt_back = gr.Textbox(
-                label="Describe the person (e.g., 'a young woman in a neutral pose')",
-                lines=3
-              )
 
               generate_button = gr.Button("Generate Person Image")
                 
                 # Hidden image path component
-              image_path_1 = gr.Image(
-                    type="filepath",
-                    interactive=True,
-                    visible=False,
-                )
-              
-              image_path_2 = gr.Image(
+              image_path = gr.Image(
                     type="filepath",
                     interactive=True,
                     visible=False,
                 )
                 
                 # Display generated person image
-              person_image_1 = gr.ImageEditor(
+              person_image = gr.ImageEditor(
                     interactive=True,
                     label="Generated Person Image",
                     type="filepath"
                 )
-              person_image_2 = gr.ImageEditor(
-                    interactive=True,
-                    label="Generated Person Image",
-                    type="filepath"
-                )
-
+              
               with gr.Row():
                     with gr.Column(scale=1, min_width=230):
-                        cloth_image_front = gr.Image(
+                        cloth_image = gr.Image(
                             interactive=True, label="Condition Image", type="filepath"
                         )
-                        cloth_image_back = gr.Image(
-                            interactive=True, label="Condition Image", type="filepath"
-                        )
-                        cloth_images = [cloth_image_front, cloth_image_back]
+
+                        cloth_description = generate_upper_cloth_description(cloth_image)
+                        
                     with gr.Column(scale=1, min_width=120):
                         gr.Markdown(
                             '<span style="color: #808080; font-size: small;">Two ways to provide Mask:<br>1. Upload the person image and use the `🖌️` above to draw the Mask (higher priority)<br>2. Select the `Try-On Cloth Type` to generate automatically </span>'
@@ -395,42 +409,39 @@ def app_gradio():
             with gr.Column(scale=2, min_width=500):
                 # single or multiple image
 
-                result_image_1 = gr.Image(interactive=False, label="Result")
-                result_image_2 = gr.Image(interactive=False, label="Result")
+                result_image = gr.Image(interactive=False, label="Result")
+                
                 with gr.Row():
                     # Photo Examples
                     root_path = "resource/demo/example"
                     
 
-            image_path_1.change(
-                person_example_fn, inputs=image_path_1, outputs=person_image_1
-            )
-
-            image_path_2.change(
-                person_example_fn, inputs=image_path_2, outputs=person_image_1
+            image_path.change(
+                person_example_fn, inputs=image_path, outputs=person_image
             )
 
 
             # Connect the generation button
             generate_button.click(
-                generate_person_images,
-                inputs=[[text_prompt_front, text_prompt_back]],
-                outputs=[person_image_1, person_image_2]
+                generate_person_image,
+                inputs=[generate_ai_model_prompt(text_prompt, cloth_description)],
+                outputs=[person_image]
             )
 
-            # submit.click(
-            #     submit_function,
-            #     [
-            #         [person_image_1, person_image_2],
-            #         cloth_images,
-            #         cloth_type,
-            #         num_inference_steps,
-            #         guidance_scale,
-            #         seed,
-            #         show_type,
-            #     ],
-            #     [result_image_1, result_image_2],
-            # )
+            
+            submit.click(
+                submit_function,
+                [
+                    person_image,
+                    cloth_image,
+                    cloth_type,
+                    num_inference_steps,
+                    guidance_scale,
+                    seed,
+                    show_type,
+                ],
+                result_image,
+            )
     demo.queue().launch(share=True, show_error=True)
 
 
