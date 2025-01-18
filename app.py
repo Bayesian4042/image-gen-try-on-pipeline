@@ -334,21 +334,25 @@ def generate_upper_cloth_description(product_image_path, cloth_type: str):
         system_prompt = """
             You are world class fahsion designer
             Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
+            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
         """
     elif (cloth_type == "lower"):
         system_prompt = """
             You are world class fahsion designer
             Your task is to Write a detailed description of the lower body garment shown in the image, focusing on its fit, fabric type, waist style, and any notable design elements or features in one or two lines for given image.
+            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
         """
     elif (cloth_type == "overall"):
         system_prompt = """
             You are world class fahsion designer
             Your task is to Write a detailed description of the overall garment shown in the image, focusing on its fit, fabric type, sleeve style, neckline, and any notable design elements or features in one or two lines for given image.
+            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
         """
     else:
         system_prompt = """
             You are world class fahsion designer
             Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
+            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
         """
 
     response = openai_client.chat.completions.create(
