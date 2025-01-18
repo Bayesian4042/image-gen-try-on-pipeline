@@ -127,21 +127,21 @@ text_encoder_2_4bit = T5EncoderModel.from_pretrained(
 
 
 # Pipeline
-pipeline = CatVTONPipeline(
-    base_ckpt=args.base_model_path,
-    attn_ckpt=repo_path,
-    attn_ckpt_version="mix",
-    weight_dtype=init_weight_dtype(args.mixed_precision),
-    use_tf32=args.allow_tf32,
-    device='cuda'
-)
-# AutoMasker
-mask_processor = VaeImageProcessor(vae_scale_factor=8, do_normalize=False, do_binarize=True, do_convert_grayscale=True)
-automasker = AutoMasker(
-    densepose_ckpt=os.path.join(repo_path, "DensePose"),
-    schp_ckpt=os.path.join(repo_path, "SCHP"),
-    device='cuda', 
-)
+# pipeline = CatVTONPipeline(
+#     base_ckpt=args.base_model_path,
+#     attn_ckpt=repo_path,
+#     attn_ckpt_version="mix",
+#     weight_dtype=init_weight_dtype(args.mixed_precision),
+#     use_tf32=args.allow_tf32,
+#     device='cuda'
+# )
+# # AutoMasker
+# mask_processor = VaeImageProcessor(vae_scale_factor=8, do_normalize=False, do_binarize=True, do_convert_grayscale=True)
+# automasker = AutoMasker(
+#     densepose_ckpt=os.path.join(repo_path, "DensePose"),
+#     schp_ckpt=os.path.join(repo_path, "SCHP"),
+#     device='cuda', 
+# )
 
 def submit_function(
     person_images,
@@ -299,7 +299,7 @@ def generate_person_images(prompts):
         
         output_paths.append(output_path)
     
-    return output_paths
+    return output_paths[0], output_paths[1]
 
 HEADER = """
 """
@@ -414,7 +414,7 @@ def app_gradio():
             # Connect the generation button
             generate_button.click(
                 generate_person_images,
-                inputs=[text_prompt_front, text_prompt_back],
+                inputs=[[text_prompt_front, text_prompt_back]],
                 outputs=[person_image_1, person_image_2]
             )
 
