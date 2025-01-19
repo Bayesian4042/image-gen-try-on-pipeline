@@ -221,6 +221,7 @@ def submit_function(
     
     # Generate captions for the campaign
     captions = generate_captions(product_description, campaign_context)
+
     if show_type == "result only":
         return result_image
     else:
@@ -428,6 +429,7 @@ def generate_caption_for_image(image):
 def generate_ai_model_prompt(model_description, product_description):
     print("prompt for ai model generation", f" {model_description} wearing {product_description}.")
     return f" {model_description} wearing {product_description}, full image"
+
 def generate_captions(product_description, campaign_context):
     
     #system prompt
@@ -597,11 +599,11 @@ def app_gradio():
                 [result_image, captions_textbox]
             )
             
-            generate_caption_btn.click(
-                generate_caption_for_image,
-                inputs=[result_image],
-                outputs=[caption_text]
-            )
+            # generate_caption_btn.click(
+            #     generate_caption_for_image,
+            #     inputs=[result_image],
+            #     outputs=[caption_text]
+            # )
     demo.queue().launch(share=True, show_error=True)
 
 
