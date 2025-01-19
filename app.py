@@ -386,6 +386,9 @@ def generate_caption_for_image(image):
     if isinstance(image, str):
         base64_image = pil_image_to_base64(image)
     else:
+        # Convert numpy array to PIL Image
+        if isinstance(image, np.ndarray):
+            image = Image.fromarray((image * 255).astype(np.uint8))
         buffered = BytesIO()
         image.save(buffered, format="PNG")
         base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
