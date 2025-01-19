@@ -114,10 +114,10 @@ class CatVTONPipeline:
         image: Union[PIL.Image.Image, torch.Tensor],
         condition_image: Union[PIL.Image.Image, torch.Tensor],
         mask: Union[PIL.Image.Image, torch.Tensor],
-        num_inference_steps: int = 50,
+        num_inference_steps: int = 60,
         guidance_scale: float = 2.5,
         height: int = 1024,
-        width: int = 768,
+        width: int = 1024,
         generator=None,
         eta=1.0,
         **kwargs
