@@ -375,6 +375,46 @@ def generate_upper_cloth_description(product_image_path, cloth_type: str):
 
     return response.choices[0].message.content
 
+def generate_caption_for_image(image):
+    """
+    Generates a caption for the given image using OpenAI's vision model.
+    """
+    if image is None:
+        return "Please generate a try-on result first."
+    
+    # Convert the image to base64
+    if isinstance(image, str):
+        base64_image = pil_image_to_base64(image)
+    else:
+        buffered = BytesIO()
+        image.save(buffered, format="PNG")
+        base64_image = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+    system_prompt = """
+        You are a world class campaign generator for cloth that model is wearing.
+        Create campaign caption for the image shown below. 
+        create engaging campaign captions for products in the merchandise for instagram stories that attract, convert and retain customers.
+    """
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{base64_image}"
+                        }
+                    }
+                ]},
+            ],
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error generating caption: {str(e)}"
+
 def generate_ai_model_prompt(model_description, product_description):
     print("prompt for ai model generation", f" {model_description} wearing {product_description}.")
     return f" {model_description} wearing {product_description}, full image"
@@ -470,6 +510,8 @@ def app_gradio():
                 # single or multiple image
 
                 result_image = gr.Image(interactive=False, label="Result")
+                caption_text = gr.Textbox(label="Generated Caption", interactive=False, lines=3)
+                generate_caption_btn = gr.Button("Generate Caption")
                 
                 with gr.Row():
                     # Photo Examples
@@ -501,6 +543,12 @@ def app_gradio():
                     show_type,
                 ],
                 result_image,
+            )
+            
+            generate_caption_btn.click(
+                generate_caption_for_image,
+                inputs=[result_image],
+                outputs=[caption_text]
             )
     demo.queue().launch(share=True, show_error=True)
 
