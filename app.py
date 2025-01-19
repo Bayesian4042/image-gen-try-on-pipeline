@@ -159,7 +159,8 @@ def submit_function(
     num_inference_steps,
     guidance_scale,
     seed,
-    show_type
+    show_type,
+    campaign_context,
 ):
     person_image, mask = person_image["background"], person_image["layers"][0]
     mask = Image.open(mask).convert("L")
@@ -185,6 +186,7 @@ def submit_function(
     person_image = resize_and_crop(person_image, (args.width, args.height))
     cloth_image = resize_and_padding(cloth_image, (args.width, args.height))
     
+
     # Process mask
     if mask is not None:
         mask = resize_and_crop(mask, (args.width, args.height))
@@ -214,6 +216,11 @@ def submit_function(
     masked_person = vis_mask(person_image, mask)
     save_result_image = image_grid([person_image, masked_person, cloth_image, result_image], 1, 4)
     save_result_image.save(result_save_path)
+    # Generate product description
+    product_description = generate_upper_cloth_description(cloth_image, cloth_type)
+    
+    # Generate captions for the campaign
+    captions = generate_captions(product_description, campaign_context)
     if show_type == "result only":
         return result_image
     else:
@@ -228,7 +235,7 @@ def submit_function(
         new_result_image = Image.new("RGB", (width + condition_width + 5, height))
         new_result_image.paste(conditions, (0, 0))
         new_result_image.paste(result_image, (condition_width + 5, 0))
-    return new_result_image
+    return new_result_image, captions
 
 
 def person_example_fn(image_path):
@@ -421,6 +428,36 @@ def generate_caption_for_image(image):
 def generate_ai_model_prompt(model_description, product_description):
     print("prompt for ai model generation", f" {model_description} wearing {product_description}.")
     return f" {model_description} wearing {product_description}, full image"
+def generate_captions(product_description, campaign_context):
+    
+    #system prompt
+    system_prompt = """
+        You are a world-class marketing expert.
+        Your task is to create engaging, professional, and contextually relevant campaign captions based on the details provided.
+        Use creative language to highlight the product's key features and align with the campaign's goals.
+        Ensure the captions are tailored to the specific advertising context provided.
+    """
+
+    #  user prompt
+    user_prompt = f"""
+    Campaign Context: {campaign_context}
+    Product Description: {product_description}
+    Generate captivating captions for this campaign that align with the provided context.
+    """
+    
+    # Call OpenAI API
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+
+    # Extract generated captions
+    captions = response.choices[0].message.content.strip()
+    return captions
+
 
 HEADER = """
 """
@@ -451,6 +488,13 @@ def app_gradio():
                     label="Generated Person Image",
                     type="filepath"
                 )
+
+              campaign_context = gr.Textbox(
+                    label="Describe your campaign context (e.g., 'Summer sale campaign focusing on vibrant colors')",
+                    lines=3,
+                    placeholder="What message do you want to convey in this campaign?",
+                )
+
               
               with gr.Row():
                     with gr.Column(scale=1, min_width=230):
@@ -513,9 +557,13 @@ def app_gradio():
                 # single or multiple image
 
                 result_image = gr.Image(interactive=False, label="Result")
-                caption_text = gr.Textbox(label="Generated Caption", interactive=False, lines=3)
-                generate_caption_btn = gr.Button("Generate Caption")
-                
+                captions_textbox = gr.Textbox(
+                label="Generated Campaign Captions",
+                interactive=False,
+                lines=6
+                )
+
+
                 with gr.Row():
                     # Photo Examples
                     root_path = "resource/demo/example"
@@ -544,8 +592,9 @@ def app_gradio():
                     guidance_scale,
                     seed,
                     show_type,
+                    campaign_context,
                 ],
-                result_image,
+                [result_image, captions_textbox]
             )
             
             generate_caption_btn.click(
