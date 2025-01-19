@@ -312,20 +312,23 @@ def generate_person_image(text, cloth_description):
     
     return output_path
 
-def pil_image_to_base64(image_path: str, format: str = "PNG") -> str:
+def pil_image_to_base64(image, format: str = "PNG") -> str:
     """
-    Converts an image at a file path to a Base64 encoded string.
+    Converts an image to a Base64 encoded string.
 
     Args:
-        image_path (str): The file path to the image.
+        image: Either a file path (str) or a PIL Image object
         format (str): The format to save the image as (default is PNG).
 
     Returns:
         str: A Base64 encoded string of the image.
     """
     try:
-        # Open the image file
-        image = Image.open(image_path)
+        # If image is a file path, open it
+        if isinstance(image, str):
+            image = Image.open(image)
+        elif not isinstance(image, Image.Image):
+            raise ValueError("Input must be either a file path or a PIL Image object")
         
         # Convert the image to Base64
         buffered = BytesIO()
@@ -334,54 +337,57 @@ def pil_image_to_base64(image_path: str, format: str = "PNG") -> str:
         image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
         return image_base64
     except Exception as e:
-        return f"Error converting image to Base64: {e}"
+        print(f"Error converting image to Base64: {e}")
+        raise e
 
-def generate_upper_cloth_description(product_image_path, cloth_type: str):
-    base_64_image = pil_image_to_base64(product_image_path)
+def generate_upper_cloth_description(product_image, cloth_type: str):
+    try:
+        base_64_image = pil_image_to_base64(product_image)
 
-    if (cloth_type == "upper"):
-        system_prompt = """
-            You are world class fahsion designer
-            Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
-            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
-        """
-    elif (cloth_type == "lower"):
-        system_prompt = """
-            You are world class fahsion designer
-            Your task is to Write a detailed description of the lower body garment shown in the image, focusing on its fit, fabric type, waist style, and any notable design elements or features in one or two lines for given image.
-            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
-        """
-    elif (cloth_type == "overall"):
-        system_prompt = """
-            You are world class fahsion designer
-            Your task is to Write a detailed description of the overall garment shown in the image, focusing on its fit, fabric type, sleeve style, neckline, and any notable design elements or features in one or two lines for given image.
-            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
-        """
-    else:
-        system_prompt = """
-            You are world class fahsion designer
-            Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
-            Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
-        """
+        if cloth_type == "upper":
+            system_prompt = """
+                You are world class fahsion designer
+                Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
+                Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
+            """
+        elif cloth_type == "lower":
+            system_prompt = """
+                You are world class fahsion designer
+                Your task is to Write a detailed description of the lower body garment shown in the image, focusing on its fit, fabric type, waist style, and any notable design elements or features in one or two lines for given image.
+                Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
+            """
+        elif cloth_type == "overall":
+            system_prompt = """
+                You are world class fahsion designer
+                Your task is to Write a detailed description of the overall garment shown in the image, focusing on its fit, fabric type, sleeve style, neckline, and any notable design elements or features in one or two lines for given image.
+                Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
+            """
+        else:
+            system_prompt = """
+                You are world class fahsion designer
+                Your task is to Write a detailed description of the upper body garment shown in the image, focusing on its fit, sleeve style, fabric type, neckline, and any notable design elements or features in one or two lines for given image.
+                Don't start with "This image shows a pair of beige cargo ..." but instead start with "a pair of beige cargo ..."
+            """
 
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [
-                {
-                   "type": "image_url",
-                   "image_url": {
-                        "url": f"data:image/jpeg;base64,{base_64_image}"
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": [
+                    {
+                       "type": "image_url",
+                       "image_url": {
+                            "url": f"data:image/jpeg;base64,{base_64_image}"
+                       }
+                    }
+                ]},
+            ],
+        )
 
-                   }
-                }
-            ]},
-            
-        ],
-    )
-
-    return response.choices[0].message.content
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Error in generate_upper_cloth_description: {e}")
+        raise e
 
 def generate_caption_for_image(image):
     """
