@@ -18,8 +18,8 @@ def parse_args():
     parser.add_argument(
         "--base_model_path",
         type=str,
-        # default="black-forest-labs/FLUX.1-Fill-dev",
-        default="Models/FLUX.1-Fill-dev",
+        default="black-forest-labs/FLUX.1-Fill-dev",
+        # default="Models/FLUX.1-Fill-dev",
         help="The path to the base model to use for evaluation."
     )
     parser.add_argument(
